@@ -1,8 +1,0 @@
-{
-  "python.defaultInterpreterPath": "${workspaceFolder}/backend/.venv/bin/python",
-  "python.testing.pytestEnabled": true,
-  "python.testing.pytestArgs": ["backend/tests"],
-  "editor.formatOnSave": false,
-  "files.exclude": { "**/__pycache__": true, "**/.pytest_cache": true },
-  "typescript.tsdk": "frontend/node_modules/typescript/lib"
-}
