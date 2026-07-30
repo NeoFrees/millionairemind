@@ -1,7 +1,7 @@
 import { AnimatePresence, motion } from 'framer-motion'
 import { Lock, ShieldCheck, TrendingDown, Zap } from 'lucide-react'
 import { useEffect, useRef } from 'react'
-import { Empty, KeyVal, Panel, cx } from '../components/ui'
+import { Empty, FrameCorners, KeyVal, Panel, cx } from '../components/ui'
 import { api } from '../lib/api'
 import { ago, pct, usd } from '../lib/format'
 import type { LadderState } from '../lib/types'
@@ -51,6 +51,7 @@ export default function Ladder({
   return (
     <div className="grid gap-4 lg:grid-cols-[minmax(0,1fr)_320px] h-full min-h-0">
       {/* ── the ladder itself ─────────────────────────────────────────── */}
+      <FrameCorners fill>
       <Panel
         title="The Compounding Ladder"
         subtitle={`Base ${usd(data.base_unit)} · node n target = base × 2ⁿ · ${pct(data.ratchet_pct, 0)} of every level-up gain is ratcheted into the protected reserve`}
@@ -144,6 +145,7 @@ export default function Ladder({
           </div>
         </div>
       </Panel>
+      </FrameCorners>
 
       {/* ── side rail ─────────────────────────────────────────────────── */}
       <div className="flex flex-col gap-4 min-h-0">

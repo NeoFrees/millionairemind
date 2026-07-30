@@ -1,7 +1,7 @@
 import { useState } from 'react'
 import { motion } from 'framer-motion'
 import { AlertOctagon, Power, RotateCcw, ShieldCheck } from 'lucide-react'
-import { Empty, KeyVal, LimitRow, Meter, Panel, cx } from '../components/ui'
+import { Empty, FrameCorners, KeyVal, LimitRow, Meter, Panel, cx } from '../components/ui'
 import { api } from '../lib/api'
 import { ago, clock, pct } from '../lib/format'
 import type { Config, RiskState } from '../lib/types'
@@ -28,6 +28,7 @@ export default function Risk() {
     <div className="grid gap-4 xl:grid-cols-[minmax(0,1fr)_340px] min-h-0">
       <div className="flex flex-col gap-4 min-h-0">
         {/* ── kill switch ─────────────────────────────────────────────── */}
+        <FrameCorners className="shrink-0">
         <section className={cx('panel p-5 transition-shadow', tripped && 'shadow-kill border-down/50')}>
           <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-5">
             <div className="min-w-0">
@@ -79,6 +80,7 @@ export default function Risk() {
             </div>
           </div>
         </section>
+        </FrameCorners>
 
         {/* ── breakers ────────────────────────────────────────────────── */}
         <Panel title="Drawdown Circuit Breakers"

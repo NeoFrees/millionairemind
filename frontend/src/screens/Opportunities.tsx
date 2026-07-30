@@ -1,7 +1,7 @@
 import { useState } from 'react'
 import { motion } from 'framer-motion'
 import { ChevronDown, ExternalLink, Radar, Skull } from 'lucide-react'
-import { Badge, Dir, Empty, Panel, VenueTag, cx } from '../components/ui'
+import { Badge, Dir, Empty, FrameCorners, Panel, VenueTag, cx } from '../components/ui'
 import { api } from '../lib/api'
 import { ago, pct, price, signedPct, titleize, usd } from '../lib/format'
 import type { Candidate, Thesis, ThesisStatus } from '../lib/types'
@@ -60,6 +60,7 @@ export default function Opportunities() {
         )}
       </Panel>
 
+      <FrameCorners>
       <div className="grid gap-3 md:grid-cols-3 xl:grid-cols-6 min-h-0">
         {COLUMNS.map((col) => {
           const items = col.key === 'proposed' ? [] : byStatus(col.key)
@@ -97,6 +98,7 @@ export default function Opportunities() {
           )
         })}
       </div>
+      </FrameCorners>
     </div>
   )
 }

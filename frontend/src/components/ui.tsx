@@ -10,9 +10,19 @@ export const cx = clsx
  * for the headline instrument on a screen (equity curve, risk suite) so it
  * reads as "the one to watch," not decoration repeated on every card.
  * ──────────────────────────────────────────────────────────────────────────── */
-export function FrameCorners({ children, className }: { children: ReactNode; className?: string }) {
+export function FrameCorners({ children, className, fill }: { children: ReactNode; className?: string; fill?: boolean }) {
+  // Plain by default: position: relative + absolutely-positioned corner ticks,
+  // no participation in the parent's sizing at all — safe to drop around any
+  // panel regardless of its flex/grid ancestor context.
+  //
+  // fill=true opts into a grid + single fr row that transparently passes
+  // through whatever height the parent gives it (stretches inside a sized
+  // flex/grid ancestor, shrinks to content in plain flow). Only use this when
+  // the wrapped child genuinely needs to inherit a definite height from above
+  // (e.g. an internal h-full scroll region) — on a definite-height ancestor
+  // it consumes the full track, which can starve sibling panels.
   return (
-    <div className={cx('frame-corners', className)}>
+    <div className={cx('frame-corners', fill && 'grid grid-rows-[minmax(0,1fr)] h-full min-h-0', className)}>
       <span className="fc-tr" /><span className="fc-bl" />
       {children}
     </div>

@@ -1,6 +1,6 @@
 import { useState } from 'react'
 import { Check, Landmark, Lock, ScrollText, X } from 'lucide-react'
-import { Badge, Empty, Panel, VenueTag, cx } from '../components/ui'
+import { Badge, Empty, FrameCorners, Panel, VenueTag, cx } from '../components/ui'
 import { api } from '../lib/api'
 import { ago, clock, pct, titleize, usd } from '../lib/format'
 import type { AuditEntry, Treasury as TData } from '../lib/types'
@@ -72,6 +72,7 @@ export default function Treasury() {
 
       <div className="grid gap-4 xl:grid-cols-[minmax(0,1fr)_minmax(0,1fr)] min-h-0">
         {/* ── approval inbox ──────────────────────────────────────────── */}
+        <FrameCorners>
         <Panel title="Approval Inbox"
           subtitle="One tap, with every number needed to decide — trade tickets and capital movements"
           right={<span className={cx('chip', pending.length > 0 ? 'border-amber/40 text-amber bg-amber/10' : 'border-hair2')}>
@@ -141,6 +142,7 @@ export default function Treasury() {
             ))}
           </div>
         </Panel>
+        </FrameCorners>
 
         {/* ── audit ───────────────────────────────────────────────────── */}
         <Panel title="Immutable Audit Log"
