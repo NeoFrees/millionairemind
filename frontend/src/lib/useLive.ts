@@ -1,5 +1,6 @@
 import { useCallback, useEffect, useRef, useState } from 'react'
 import { api } from './api'
+import { demoSnapshot } from './demo'
 import type { Snapshot } from './types'
 
 /** Poll a resource, and re-fetch immediately whenever the backend pushes a tick.
@@ -43,8 +44,23 @@ export function useSocket() {
     let ws: WebSocket | null = null
     let retry: ReturnType<typeof setTimeout>
     let closed = false
+    let demoInterval: ReturnType<typeof setInterval>
+    const isDemo = window.location.hostname.endsWith('github.io') || import.meta.env.VITE_DEMO === 'true'
 
     const connect = () => {
+      if (isDemo) {
+        setSnapshot(demoSnapshot)
+        setConnected(true)
+        demoInterval = setInterval(() => {
+          setSnapshot((prev) =>
+            prev
+              ? { ...prev, tick: prev.tick + 1, equity: prev.equity + 1_100 }
+              : { ...demoSnapshot, tick: demoSnapshot.tick + 1 }
+          )
+        }, 2000)
+        return
+      }
+
       ws = new WebSocket(api.wsUrl)
       ws.onopen = () => setConnected(true)
       ws.onclose = () => {
@@ -72,7 +88,12 @@ export function useSocket() {
       }
     }
     connect()
-    return () => { closed = true; clearTimeout(retry); ws?.close() }
+    return () => {
+      closed = true
+      clearTimeout(retry)
+      clearInterval(demoInterval)
+      ws?.close()
+    }
   }, [])
 
   const clearFlash = useCallback(() => setFlash(null), [])

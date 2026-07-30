@@ -1,5 +1,5 @@
 import {
-  Area, AreaChart, CartesianGrid, ReferenceLine, ResponsiveContainer, Tooltip, XAxis, YAxis,
+  Area, AreaChart, Bar, BarChart, CartesianGrid, Legend, ReferenceLine, ResponsiveContainer, Tooltip, XAxis, YAxis,
 } from 'recharts'
 import { Activity as ActIcon, AlertTriangle } from 'lucide-react'
 import { Badge, Dir, Empty, Meter, Panel, Pnl, Stat, VenueTag, cx } from '../components/ui'
@@ -18,6 +18,19 @@ export default function Dashboard() {
   const open = data.positions.filter((p) => p.status === 'open')
   const dayPnl = s.realized_pnl + s.unrealized_pnl
   const toNext = Math.max(0, s.next_target - s.equity)
+
+  const exposureByVenue = Object.entries(
+    open.reduce<Record<string, number>>((acc, p) => {
+      acc[p.venue] = (acc[p.venue] ?? 0) + p.size_usd
+      return acc
+    }, {}),
+  ).map(([venue, value]) => ({ venue, value }))
+
+  const performanceData = open.map((p) => ({
+    instrument: p.instrument,
+    pnl: p.unrealized_pnl,
+    exposure: p.size_usd,
+  }))
 
   // Pad the visible range by 8% of its span so the line isn't glued to an edge.
   // Scale to equity only. Before the first level-up the floor is $0, and
@@ -133,6 +146,54 @@ export default function Dashboard() {
               A rung cannot overspend even across trades that each pass their own limits —
               the Coordinator decrements this budget on every fill and refuses what does not fit.
             </p>
+          </div>
+        </Panel>
+      </div>
+
+      <div className="grid gap-4 xl:grid-cols-[minmax(0,1fr)_320px] shrink-0">
+        <Panel title="Exposure Breakdown"
+          subtitle="Notional exposure by venue across the live book" pad={false}>
+          <div className="h-[240px]">
+            {exposureByVenue.length === 0 ? (
+              <Empty>No live exposures yet.</Empty>
+            ) : (
+              <ResponsiveContainer width="100%" height="100%">
+                <BarChart data={exposureByVenue} margin={{ top: 16, right: 8, left: 0, bottom: 8 }}>
+                  <CartesianGrid stroke="#1b2438" vertical={false} />
+                  <XAxis dataKey="venue" stroke="#4d5a75" fontSize={10} tickLine={false} axisLine={false} />
+                  <YAxis stroke="#4d5a75" fontSize={10} width={54} tickLine={false} axisLine={false}
+                    tickFormatter={(v) => usd(Number(v), { compact: true })} />
+                  <Tooltip
+                    contentStyle={{ background: '#0d1220', border: '1px solid #26314a', borderRadius: 8, fontSize: 11 }}
+                    formatter={(v) => usd(Number(v), { compact: true })}
+                  />
+                  <Legend wrapperStyle={{ color: '#8593ad', fontSize: 10, top: 0, left: 0 }} />
+                  <Bar dataKey="value" fill="#00e59b" name="Exposure" barSize={20} />
+                </BarChart>
+              </ResponsiveContainer>
+            )}
+          </div>
+        </Panel>
+
+        <Panel title="Position Performance" pad={false}>
+          <div className="h-[240px]">
+            {performanceData.length === 0 ? (
+              <Empty>No positions available.</Empty>
+            ) : (
+              <ResponsiveContainer width="100%" height="100%">
+                <BarChart data={performanceData} margin={{ top: 16, right: 8, left: 0, bottom: 8 }}>
+                  <CartesianGrid stroke="#1b2438" vertical={false} />
+                  <XAxis dataKey="instrument" stroke="#4d5a75" fontSize={10} tickLine={false} axisLine={false} interval={0} />
+                  <YAxis stroke="#4d5a75" fontSize={10} width={58} tickLine={false} axisLine={false} tickFormatter={(v) => usd(Number(v), { compact: true })} />
+                  <Tooltip
+                    contentStyle={{ background: '#0d1220', border: '1px solid #26314a', borderRadius: 8, fontSize: 11 }}
+                  />
+                  <Legend wrapperStyle={{ color: '#8593ad', fontSize: 10, top: 0, left: 0 }} />
+                  <Bar dataKey="pnl" fill="#f5a524" name="P&L" barSize={12} />
+                  <Bar dataKey="exposure" fill="#3ea8ff" name="Exposure" barSize={12} />
+                </BarChart>
+              </ResponsiveContainer>
+            )}
           </div>
         </Panel>
       </div>
