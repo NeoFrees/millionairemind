@@ -1,5 +1,7 @@
 # MillionaireMind — Money Manager
 
+[Open MillionaireMind](https://neofrees.github.io/millionairemind/) — a GitHub Pages preview of the frontend.
+
 An autonomous, research-gated capital-compounding platform. It takes a starting
 bankroll and climbs a 20-node equity-doubling ladder, deploying capital **only**
 into opportunities that clear a written thesis, a quantified edge, and a hard
