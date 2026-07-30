@@ -1,130 +1,329 @@
-import { useMemo, useRef, useEffect } from 'react'
-import * as THREE from 'three'
-import ReactFlow, { Background, Controls } from 'reactflow'
-import type { Node, Edge } from 'reactflow'
-import 'reactflow/dist/style.css'
-import { Panel } from '../components/ui'
-import { demoDashboard, demoCandidates, demoTheses } from '../lib/demo'
+import { useMemo, useState } from 'react'
+import {
+  Bar, BarChart, CartesianGrid, Cell, ResponsiveContainer, Tooltip as RTooltip,
+  Treemap, XAxis, YAxis,
+} from 'recharts'
+import { Allocation, Badge, Delta, Empty, Gauge, KeyVal, Panel, Pnl, Segmented, Tip, cx } from '../components/ui'
+import { pct, price, titleize, usd } from '../lib/format'
+import { demoDashboard } from '../lib/demo'
 
-function ThreeCommandDeck({ label }: { label: string }) {
-  const containerRef = useRef<HTMLDivElement | null>(null)
-  useEffect(() => {
-    const el = containerRef.current
-    if (!el) return
+const PERIODS = ['1D', '1W', '1M', 'YTD'] as const
+// amber is reserved for 'not real money' warnings — it is not an allocation colour
+const CLASS_COLORS = ['#0F172A', '#2563EB', '#10B981', '#6366F1', '#64748B', '#94A3B8']
 
-    const scene = new THREE.Scene()
-    scene.background = new THREE.Color(0x050714)
-
-    const camera = new THREE.PerspectiveCamera(50, el.clientWidth / el.clientHeight, 0.1, 100)
-    camera.position.set(0, 2.5, 5)
-
-    const renderer = new THREE.WebGLRenderer({ antialias: true })
-    renderer.setSize(el.clientWidth, el.clientHeight)
-    renderer.shadowMap.enabled = true
-    el.appendChild(renderer.domElement)
-
-    const ambient = new THREE.AmbientLight(0xffffff, 0.6)
-    scene.add(ambient)
-    const dir = new THREE.DirectionalLight(0xffffff, 0.8)
-    dir.position.set(5, 10, 5)
-    dir.castShadow = true
-    scene.add(dir)
-
-    const geometry = new THREE.BoxGeometry(1.6, 0.6, 1)
-    const material = new THREE.MeshStandardMaterial({ color: 0x00e59b, metalness: 0.4, roughness: 0.2 })
-    const mesh = new THREE.Mesh(geometry, material)
-    mesh.castShadow = true
-    mesh.position.set(0, 0.4, 0)
-    scene.add(mesh)
-
-    const planeGeo = new THREE.PlaneGeometry(20, 20)
-    const planeMat = new THREE.MeshStandardMaterial({ color: 0x050714 })
-    const plane = new THREE.Mesh(planeGeo, planeMat)
-    plane.receiveShadow = true
-    plane.rotation.x = -Math.PI / 2
-    plane.position.y = -0.3
-    scene.add(plane)
-
-    const labelDiv = document.createElement('div')
-    labelDiv.style.position = 'absolute'
-    labelDiv.style.color = 'white'
-    labelDiv.style.fontWeight = '700'
-    labelDiv.style.fontSize = '14px'
-    labelDiv.innerText = label
-    el.style.position = 'relative'
-    el.appendChild(labelDiv)
-
-    let raf = 0
-    const animate = () => {
-      mesh.rotation.y += 0.01
-      renderer.render(scene, camera)
-      raf = requestAnimationFrame(animate)
-    }
-    animate()
-
-    const handleResize = () => {
-      camera.aspect = el.clientWidth / el.clientHeight
-      camera.updateProjectionMatrix()
-      renderer.setSize(el.clientWidth, el.clientHeight)
-    }
-    window.addEventListener('resize', handleResize)
-
-    return () => {
-      cancelAnimationFrame(raf)
-      window.removeEventListener('resize', handleResize)
-      renderer.dispose()
-      el.removeChild(renderer.domElement)
-      if (labelDiv.parentNode === el) el.removeChild(labelDiv)
-    }
-  }, [label])
-
-  return <div ref={containerRef} style={{ width: '100%', height: '100%', position: 'relative' }} />
-}
-
+/** Screen 6 — Portfolio Performance & Attribution.
+ *  Replaces the decorative 3D deck with two instruments that a desk actually
+ *  reads: an allocation treemap and a reconstructed order book. */
 export default function VisualHub() {
   const dash = demoDashboard
-  const equity = dash?.snapshot?.equity ?? 0
+  const [period, setPeriod] = useState<(typeof PERIODS)[number]>('1D')
+  const open = dash.positions.filter((p) => p.status === 'open')
+  const s = dash.snapshot
 
-  const nodes: Node[] = useMemo(() => {
-    const base: Node[] = demoCandidates.map((c, i) => ({
-      id: c.id,
-      position: { x: 20 + i * 200, y: 20 + (i % 3) * 120 },
-      data: { label: `${c.instrument} (${c.score})` },
-      style: { padding: 8, background: '#0d1220', color: '#e6f6ee', border: '1px solid #1f2a3f', width: 180 },
-    }))
-    const thesisNodes: Node[] = demoTheses.map((t, i) => ({
-      id: t.id,
-      position: { x: 20 + i * 220, y: 380 + (i % 2) * 120 },
-      data: { label: `${t.instrument} · ${t.confidence}` },
-      style: { padding: 8, background: '#071024', color: '#dbeffd', border: '1px solid #213043', width: 220 },
-    }))
-    return [...base, ...thesisNodes]
-  }, [])
+  const gross = open.reduce((a, p) => a + p.size_usd, 0)
 
-  const edges: Edge[] = useMemo(() => demoCandidates.map((c, i) => ({
-    id: `e-${i}`,
-    source: c.id,
-    target: demoTheses[i % demoTheses.length].id,
-    animated: true,
-    style: { stroke: '#4dd3b6' },
-  })), [])
+  // ── allocation by asset class, cash included ──────────────────────────────
+  const byClass = useMemo(() => {
+    const m = open.reduce<Record<string, number>>((acc, p) => {
+      acc[titleize(p.venue)] = (acc[titleize(p.venue)] ?? 0) + p.size_usd
+      return acc
+    }, {})
+    return [...Object.entries(m).map(([name, value]) => ({ name, value })),
+      { name: 'Cash & Equivalents', value: s.reserve }]
+  }, [open, s.reserve])
+
+  const treemapData = byClass.map((d, i) => ({
+    ...d, fill: CLASS_COLORS[i % CLASS_COLORS.length],
+    share: d.value / byClass.reduce((a, b) => a + b.value, 0),
+  }))
+
+  // ── attribution: P&L contribution per position ────────────────────────────
+  const attribution = useMemo(
+    () => [...open]
+      .map((p) => ({ name: p.instrument.slice(0, 22), pnl: p.unrealized_pnl, notional: p.size_usd }))
+      .sort((a, b) => b.pnl - a.pnl),
+    [open],
+  )
+
+  // ── order book: bus events reconstructed as an execution log ──────────────
+  const book = useMemo(() => dash.activity.map((a, i) => {
+    const size = typeof a.payload.size === 'number' ? a.payload.size
+      : typeof a.payload.amount === 'number' ? a.payload.amount : null
+    const filled = a.topic.includes('filled')
+    const refused = a.topic.includes('refused') || a.topic.includes('halt')
+    const rejected = a.topic.includes('rejected')
+    return {
+      id: 4921 - i,
+      at: a.at,
+      side: filled ? 'BUY' : refused || rejected ? 'CXL' : 'INFO',
+      agent: a.sender,
+      event: titleize(a.topic),
+      size,
+      status: filled ? 'filled' : refused ? 'refused' : rejected ? 'rejected' : 'ack',
+    }
+  }), [dash.activity])
 
   return (
-    <div className="grid gap-4 xl:grid-cols-[1.1fr_520px]">
-      <Panel title="3D Command Deck" subtitle="Interactive 3D overview" pad={false} className="min-h-[420px]">
-        <div style={{ height: 420 }}>
-          <ThreeCommandDeck label={`Equity $${(equity / 1000).toFixed(1)}k`} />
+    <div className="flex flex-col gap-gutter">
+
+      {/* ══ SECTION: Allocation ═══════════════════════════════════════════ */}
+      <section>
+        <h2 className="h2 mb-1">Risk Exposure by Asset Class</h2>
+        <p className="micro mb-3">Notional weights, cash included · as of last mark</p>
+
+        <div className="grid12 items-start">
+          <Panel className="col-main min-w-0" title="Allocation Treemap"
+            subtitle="Area is proportional to notional weight"
+            right={<Segmented options={PERIODS} value={period} onChange={setPeriod} />}
+            pad={false}>
+            <div className="h-[320px] p-3">
+              {treemapData.length === 0 ? <Empty>No allocation to display.</Empty> : (
+                <ResponsiveContainer width="100%" height="100%">
+                  <Treemap data={treemapData} dataKey="value" stroke="#FFFFFF"
+                    isAnimationActive={false} content={<Cellish />}>
+                    <RTooltip content={<AllocTip />} />
+                  </Treemap>
+                </ResponsiveContainer>
+              )}
+            </div>
+          </Panel>
+
+          <div className="col-rail flex flex-col gap-gutter min-w-0">
+            <Panel title="Weights" subtitle="Sorted by notional">
+              <Allocation items={byClass} />
+            </Panel>
+            <Panel title="Concentration" subtitle="Single-name and single-class limits">
+              <div className="grid grid-cols-2 gap-2">
+                <Gauge size={120}
+                  value={gross > 0 ? Math.max(...open.map((p) => p.size_usd)) / gross : 0}
+                  center={pct(gross > 0 ? Math.max(...open.map((p) => p.size_usd)) / gross : 0, 0)}
+                  label="Largest position" sub={<>of gross exposure</>} />
+                <Gauge size={120}
+                  value={s.equity > 0 ? gross / s.equity : 0}
+                  center={pct(s.equity > 0 ? gross / s.equity : 0, 0)}
+                  label="Gross / equity" sub={<>leverage proxy</>} />
+              </div>
+              <p className="micro mt-3 pt-3 border-t border-hair">
+                Concentration is measured on notional, not on risk-adjusted contribution —
+                two positions in the same correlation group read as diversified here and are
+                caught by the correlation limit instead.
+              </p>
+            </Panel>
+          </div>
+        </div>
+      </section>
+
+      {/* ══ SECTION: Attribution + order book ════════════════════════════ */}
+      <div className="grid12 items-start">
+        <Panel className="col-main min-w-0" title="P&L Attribution"
+          subtitle="Unrealised contribution by position · adjusted for modelled fees" pad={false}>
+          <div className="h-[300px] p-3">
+            {attribution.length === 0 ? <Empty>No positions to attribute.</Empty> : (
+              <ResponsiveContainer width="100%" height="100%">
+                <BarChart data={attribution} layout="vertical"
+                  margin={{ top: 4, right: 24, left: 8, bottom: 4 }}>
+                  <CartesianGrid stroke="#E2E8F0" horizontal={false} />
+                  <XAxis type="number" stroke="#94A3B8" fontSize={10} tickLine={false}
+                    axisLine={false} tickFormatter={(v) => usd(Number(v), { compact: true })} />
+                  <YAxis type="category" dataKey="name" stroke="#64748B" fontSize={10}
+                    width={150} tickLine={false} axisLine={false} />
+                  <RTooltip content={<AttribTip />} />
+                  <Bar dataKey="pnl" barSize={16} radius={[0, 3, 3, 0]}>
+                    {attribution.map((d) => (
+                      <Cell key={d.name} fill={d.pnl >= 0 ? '#10B981' : '#EF4444'} />
+                    ))}
+                  </Bar>
+                </BarChart>
+              </ResponsiveContainer>
+            )}
+          </div>
+        </Panel>
+
+        <Panel className="col-rail min-w-0" title="Real-Time Order Book"
+          subtitle="Execution and risk events, newest first"
+          right={<span className="live-dot" />} pad={false}>
+          <div className="overflow-auto max-h-[300px]">
+            <table className="grid-table">
+              <thead>
+                <tr>
+                  <th>Time</th><th>Order</th><th>Side</th>
+                  <th className="text-right">Size</th><th>Status</th>
+                </tr>
+              </thead>
+              <tbody>
+                {book.map((o) => (
+                  <tr key={o.id}>
+                    <td className="num text-muted whitespace-nowrap">
+                      {new Date(o.at).toLocaleTimeString('en-US', { hour12: true })}
+                    </td>
+                    <td className="whitespace-nowrap">
+                      <span className="num text-ink font-semibold">#{o.id}</span>
+                      <div className="micro truncate max-w-[130px]">{o.event} · {o.agent}</div>
+                    </td>
+                    <td>
+                      <span className={cx('num text-2xs font-bold px-1.5 py-0.5 rounded border',
+                        o.side === 'BUY' ? 'text-upDim bg-up/[0.10] border-up/35'
+                          : o.side === 'CXL' ? 'text-down bg-down/[0.08] border-down/30'
+                          : 'text-muted border-hair2')}>{o.side}</span>
+                    </td>
+                    <td className="text-right num">
+                      {o.size !== null ? usd(o.size, { compact: true }) : <span className="text-faint">—</span>}
+                    </td>
+                    <td><Badge tone={o.status}>{o.status}</Badge></td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+          <div className="px-4 py-2.5 border-t border-hair">
+            <p className="micro">
+              Reconstructed from the internal message bus. Order IDs are synthetic — paper mode
+              never reaches a venue matching engine.
+            </p>
+          </div>
+        </Panel>
+      </div>
+
+      {/* ══ SECTION: position detail ═════════════════════════════════════ */}
+      <Panel title="Position Detail" subtitle="Marks, levels and exits per open position" pad={false}>
+        <div className="overflow-auto">
+          <table className="grid-table">
+            <thead>
+              <tr>
+                <th>Instrument</th><th>Class</th>
+                <th className="text-right">Notional</th><th className="text-right">Weight</th>
+                <th className="text-right">Avg. Cost</th><th className="text-right">Mark</th>
+                <th className="text-right">Stop</th><th className="text-right">Target</th>
+                <th className="text-right">P&L</th><th className="text-right">% Change</th>
+              </tr>
+            </thead>
+            <tbody>
+              {open.map((p) => {
+                const chg = p.entry_price > 0 ? (p.mark_price - p.entry_price) / p.entry_price : 0
+                const long = p.direction === 'long' || p.direction === 'yes'
+                return (
+                  <tr key={p.id}>
+                    <td className="font-semibold text-ink max-w-[260px] truncate">{p.instrument}</td>
+                    <td className="text-muted">{titleize(p.venue)}</td>
+                    <td className="text-right num">{usd(p.size_usd)}</td>
+                    <td className="text-right num">{pct(gross > 0 ? p.size_usd / gross : 0, 1)}</td>
+                    <td className="text-right num text-muted">{price(p.entry_price)}</td>
+                    <td className="text-right num">{price(p.mark_price)}</td>
+                    <td className="text-right num text-down">{price(p.stop)}</td>
+                    <td className="text-right num text-up">{price(p.target)}</td>
+                    <td className="text-right"><Pnl value={p.unrealized_pnl} /></td>
+                    <td className="text-right"><Delta value={long ? chg : -chg} /></td>
+                  </tr>
+                )
+              })}
+            </tbody>
+          </table>
         </div>
       </Panel>
 
-      <Panel title="Mind Map" subtitle="Organize ideas and positions" pad={false} className="min-h-[420px]">
-        <div style={{ height: 420 }} className="reactflow-wrapper">
-          <ReactFlow nodes={nodes} edges={edges} fitView nodesDraggable nodesConnectable={false}>
-            <Background gap={16} color="#07102a" />
-            <Controls />
-          </ReactFlow>
-        </div>
-      </Panel>
+      {/* ══ SECTION: cash breakdown ══════════════════════════════════════ */}
+      <div className="grid12 items-start">
+        <Panel className="col-rail min-w-0" title="Cash & Equivalents"
+          subtitle="Ring-fenced reserve — not deployable by the engine">
+          <KeyVal k="Cash" mono v={usd(Math.round(s.reserve * 0.876))} />
+          <KeyVal k="Money market" mono v={usd(Math.round(s.reserve * 0.077))} />
+          <KeyVal k="T-Bills (≤ 3m)" mono v={usd(s.reserve - Math.round(s.reserve * 0.876) - Math.round(s.reserve * 0.077))} />
+          <div className="mt-3 pt-3 border-t border-hair flex items-baseline justify-between">
+            <span className="label">Total</span>
+            <span className="num text-sm font-semibold text-ink">{usd(s.reserve)}</span>
+          </div>
+          <p className="micro mt-3">
+            Sleeve split is illustrative — paper mode holds a single internal cash balance.
+          </p>
+        </Panel>
+
+        <Panel className="col-main min-w-0" title="Projected Growth"
+          subtitle="Return still required on current equity to clear the next rung">
+          <div className="flex items-baseline gap-3 flex-wrap">
+            <span className="num text-2xl font-semibold text-ink">{usd(s.equity)}</span>
+            <span className="text-muted text-xs">→</span>
+            <span className="num text-2xl font-semibold text-cyan">{usd(s.next_target)}</span>
+            <Tip text="Gap ÷ current equity. No time estimate is implied — path and pace are not modelled.">
+              <span className="chip chip-paper ml-1">
+                needs {pct(Math.max(0, (s.next_target - s.equity) / s.equity), 1)}
+              </span>
+            </Tip>
+          </div>
+          <div className="mt-4">
+            <div className="h-2.5 w-full rounded-full bg-hair overflow-hidden">
+              <div className="h-full rounded-full bg-cyan transition-all duration-700"
+                style={{ width: `${Math.min(100, s.progress_pct * 100)}%` }} />
+            </div>
+            <div className="mt-2 flex justify-between micro num">
+              <span>{pct(s.progress_pct, 1)} of rung complete</span>
+              <span>gap {usd(Math.max(0, s.next_target - s.equity))}</span>
+            </div>
+          </div>
+          <p className="micro mt-4 pt-3 border-t border-hair">
+            Required return is arithmetic, not a forecast. Nothing on this panel projects a
+            timeline, and a rung can regress as easily as it advances.
+          </p>
+        </Panel>
+      </div>
+    </div>
+  )
+}
+
+/* ── treemap cell renderer ────────────────────────────────────────────────── */
+function Cellish(props: Record<string, unknown>) {
+  const x = props.x as number, y = props.y as number
+  const w = props.width as number, h = props.height as number
+  const name = props.name as string | undefined
+  const fill = (props.fill as string) ?? '#0F172A'
+  const value = props.value as number
+  if (!name || w < 2 || h < 2) return null
+  return (
+    <g>
+      <rect x={x} y={y} width={w} height={h} fill={fill} stroke="#FFFFFF" strokeWidth={2} rx={4} />
+      {w > 78 && h > 40 && (
+        <>
+          <text x={x + 10} y={y + 20} fill="#FFFFFF" fontSize={11} fontWeight={600}>
+            {name.length > 18 ? `${name.slice(0, 17)}…` : name}
+          </text>
+          <text x={x + 10} y={y + 36} fill="rgba(255,255,255,0.78)" fontSize={11}
+            fontFamily="JetBrains Mono, monospace">
+            {usd(value, { compact: true })}
+          </text>
+        </>
+      )}
+    </g>
+  )
+}
+
+function AllocTip({ active, payload }: { active?: boolean; payload?: { payload: Record<string, number | string> }[] }) {
+  if (!active || !payload?.length) return null
+  const d = payload[0].payload as { name: string; value: number; share: number }
+  return (
+    <div className="rounded-card border border-hair bg-panel shadow-lift px-3 py-2">
+      <div className="label mb-1">{d.name}</div>
+      <div className="num text-xs text-ink font-semibold">{usd(d.value)}</div>
+      <div className="micro num">{pct(d.share, 1)} of portfolio</div>
+    </div>
+  )
+}
+
+function AttribTip({ active, payload }: { active?: boolean; payload?: { payload: Record<string, number | string> }[] }) {
+  if (!active || !payload?.length) return null
+  const d = payload[0].payload as { name: string; pnl: number; notional: number }
+  return (
+    <div className="rounded-card border border-hair bg-panel shadow-lift px-3 py-2 min-w-[170px]">
+      <div className="label mb-1.5">{d.name}</div>
+      <div className="flex justify-between gap-4 text-2xs py-0.5">
+        <span className="text-muted">Unrealised P&L</span><Pnl value={d.pnl} />
+      </div>
+      <div className="flex justify-between gap-4 text-2xs py-0.5">
+        <span className="text-muted">Notional</span>
+        <span className="num text-body">{usd(d.notional)}</span>
+      </div>
+      <div className="flex justify-between gap-4 text-2xs py-0.5">
+        <span className="text-muted">Return on notional</span>
+        <Delta value={d.notional > 0 ? d.pnl / d.notional : 0} />
+      </div>
     </div>
   )
 }

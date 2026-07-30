@@ -2,51 +2,136 @@
 @tailwind components;
 @tailwind utilities;
 
-:root { color-scheme: dark; }
+:root {
+  color-scheme: light;
+  /* the 12-column grid the whole app is laid out against */
+  --grid-gutter: 24px;
+  --grid-gutter-tight: 16px;
+}
 
 html, body, #root { height: 100%; }
 
 body {
-  @apply bg-void text-ink font-sans antialiased;
-  /* a barely-there vignette so the ladder's glow has something to sit on */
+  @apply bg-void text-body font-sans antialiased;
+  font-feature-settings: 'cv05', 'ss03';
+  /* whisper-thin tint so white cards separate from the canvas without a border war */
   background-image:
-    radial-gradient(900px 600px at 18% -10%, rgba(0,229,155,0.055), transparent 60%),
-    radial-gradient(800px 500px at 88% 0%, rgba(62,168,255,0.045), transparent 60%);
+    radial-gradient(1100px 620px at 15% -12%, rgba(37,99,235,0.035), transparent 62%),
+    radial-gradient(900px 520px at 90% -6%, rgba(16,185,129,0.030), transparent 60%);
   background-attachment: fixed;
 }
 
-/* numbers are always mono and tabular — columns must line up */
-.num { @apply font-mono tabular-nums tracking-tight; }
+/* Numbers are always mono + tabular so decimal points stack in a column.
+   This is the single most "institutional" thing in the whole stylesheet. */
+.num { @apply font-mono tabular-nums tracking-tight; font-variant-numeric: tabular-nums; }
 
-::-webkit-scrollbar { width: 9px; height: 9px; }
-::-webkit-scrollbar-track { background: transparent; }
-::-webkit-scrollbar-thumb { @apply bg-hair2 rounded-full; }
-::-webkit-scrollbar-thumb:hover { @apply bg-faint; }
+::-webkit-scrollbar { width: 10px; height: 10px; }
+::-webkit-scrollbar-track { @apply bg-transparent; }
+::-webkit-scrollbar-thumb { @apply bg-hair2 rounded-full border-2 border-solid border-transparent; background-clip: padding-box; }
+::-webkit-scrollbar-thumb:hover { @apply bg-muted; }
 
 @layer components {
+
+  /* ── 12-column layout primitives ─────────────────────────────────────── */
+  .grid12 { @apply grid grid-cols-12 gap-4 lg:gap-6; }
+  .col-main { @apply col-span-12 xl:col-span-8; }   /* ~70% */
+  .col-rail { @apply col-span-12 xl:col-span-4; }   /* ~30% */
+
+  /* ── surfaces ────────────────────────────────────────────────────────── */
   .panel {
-    @apply bg-panel/80 border border-hair rounded-xl shadow-panel backdrop-blur-sm;
+    @apply bg-panel border border-hair rounded-card shadow-panel;
   }
+  .panel-hover { @apply transition-shadow hover:shadow-lift; }
   .hairline { @apply border-hair; }
+
+  /* ── typography scale ────────────────────────────────────────────────── */
+  .h1 { @apply text-lg font-bold tracking-tight text-ink; }
+  .h2 { @apply text-sm font-semibold tracking-tight text-ink; }
   .label {
-    @apply text-2xs uppercase tracking-[0.13em] text-faint font-medium;
+    @apply text-2xs uppercase tracking-[0.13em] text-muted font-semibold;
   }
+  /* micro-copy: "as of T+1 close", "adjusted for fees" */
+  .micro { @apply text-2xs text-faint leading-snug font-normal; }
+
+  /* ── buttons ─────────────────────────────────────────────────────────── */
   .btn {
-    @apply px-3 py-1.5 rounded-lg text-xs font-semibold border transition
-           border-hair2 text-muted hover:text-ink hover:border-faint
+    @apply inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-semibold border
+           transition-colors border-hair2 text-muted bg-panel
+           hover:text-ink hover:border-muted hover:bg-panel2
+           focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-cyan/40
            disabled:opacity-40 disabled:cursor-not-allowed;
   }
-  .btn-up    { @apply border-up/40 text-up hover:bg-up/10 hover:border-up/70; }
-  .btn-down  { @apply border-down/40 text-down hover:bg-down/10 hover:border-down/70; }
+  /* primary action — "Deploy Capital" */
+  .btn-primary {
+    @apply bg-cyan border-cyan text-white hover:bg-[#1D4ED8] hover:border-[#1D4ED8] hover:text-white;
+  }
+  /* secondary action — "Pause Flow" */
+  .btn-secondary {
+    @apply bg-panel border-cyan/50 text-cyan hover:bg-cyan/[0.06] hover:border-cyan hover:text-cyan;
+  }
+  /* danger action — "Liquidate" */
+  .btn-danger {
+    @apply bg-panel border-down/45 text-down hover:bg-down/[0.06] hover:border-down hover:text-down;
+  }
+  .btn-up    { @apply border-up/50 text-upDim hover:bg-up/[0.07] hover:border-up hover:text-upDim; }
+  .btn-down  { @apply border-down/45 text-down hover:bg-down/[0.06] hover:border-down hover:text-down; }
+
+  /* ── chips & badges ──────────────────────────────────────────────────── */
   .chip {
     @apply inline-flex items-center gap-1 px-1.5 py-0.5 rounded text-2xs font-semibold
-           border border-hair2 text-muted;
+           border border-hair2 text-muted bg-panel2;
   }
-  /* dense terminal table */
-  .grid-table { @apply w-full text-xs; }
+  .chip-paper {
+    @apply border-amber/45 text-[#B45309] bg-amber/[0.10];
+  }
+
+  /* ── dense institutional table ───────────────────────────────────────── */
+  .grid-table { @apply w-full text-xs border-separate border-spacing-0; }
   .grid-table thead th {
-    @apply label text-left py-2 px-3 border-b border-hair sticky top-0 bg-panel/95 backdrop-blur z-10;
+    @apply label text-left py-2.5 px-2.5 border-b border-hair sticky top-0 z-10
+           bg-panel/95 backdrop-blur select-none;
   }
-  .grid-table tbody td { @apply py-2 px-3 border-b border-hair/50; }
-  .grid-table tbody tr:hover { @apply bg-panel2/70; }
+  .grid-table thead th.sortable { @apply cursor-pointer hover:text-ink transition-colors; }
+  .grid-table tbody td { @apply py-2.5 px-2.5 border-b border-hair/70 text-body; }
+  /* zebra striping — reading across 8 columns without it is a squint test */
+  .grid-table tbody tr:nth-child(even) { @apply bg-panel2/60; }
+  .grid-table tbody tr { @apply transition-colors; }
+  .grid-table tbody tr:hover { @apply bg-[#F9FAFB]; }
+  .grid-table tbody tr:hover td { @apply border-hair; }
+
+  /* ── the tape (top-bar metric strip) ─────────────────────────────────── */
+  .tape-cell {
+    @apply flex flex-col justify-center px-4 border-l border-hair first:border-l-0 leading-none;
+  }
+
+  /* ── tooltips: every number explains itself on hover ─────────────────── */
+  .tip { @apply relative inline-flex items-center; }
+  .tip > .tip-body {
+    @apply pointer-events-none absolute left-1/2 bottom-full z-50 mb-2 hidden w-max max-w-[260px]
+           -translate-x-1/2 rounded-lg border border-hair bg-ink px-2.5 py-1.5
+           text-2xs font-normal leading-snug text-white shadow-lift;
+  }
+  .tip:hover > .tip-body, .tip:focus-within > .tip-body { @apply block; }
+
+  /* ── live indicator ──────────────────────────────────────────────────── */
+  .live-dot { @apply h-2 w-2 rounded-full bg-up animate-livedot shrink-0; }
+
+  /* ── segmented control (1D / 1W / 1M / YTD) ──────────────────────────── */
+  .seg { @apply inline-flex items-center rounded-lg border border-hair bg-panel2 p-0.5; }
+  .seg > button {
+    @apply px-2.5 py-1 rounded-[6px] text-2xs font-semibold text-muted transition-colors
+           hover:text-ink;
+  }
+  .seg > button[data-active='true'] { @apply bg-panel text-ink shadow-sm; }
+
+  /* ── global search ───────────────────────────────────────────────────── */
+  .search {
+    @apply w-full rounded-lg border border-hair bg-panel2 pl-8 pr-3 py-1.5 text-xs text-body
+           placeholder:text-faint focus:bg-panel focus:border-cyan/60 focus:outline-none
+           focus:ring-2 focus:ring-cyan/15 transition;
+  }
 }
+
+/* recharts: match the institutional palette instead of its defaults */
+.recharts-cartesian-axis-tick text { fill: #64748B; }
+.recharts-tooltip-wrapper { outline: none; }

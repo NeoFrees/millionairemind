@@ -131,7 +131,7 @@ export default function Ladder({
                         </div>
                         <div className="flex justify-between mt-1.5 text-2xs">
                           <span className="text-faint">
-                            needs <span className="num text-muted">{usd(Math.max(0, target - equity))}</span> more to double
+                            needs <span className="num text-muted">{usd(Math.max(0, target - equity))}</span> to clear this rung
                           </span>
                           <span className="text-cyan num">reserve {usd(reserve)}</span>
                         </div>
@@ -160,7 +160,7 @@ export default function Ladder({
               <KeyVal k="Total equity" v={usd(equity)} mono />
               <KeyVal k="Next target" v={usd(data.next_target, { compact: true })} mono />
               <KeyVal k="Deployable" v={usd(data.deployable)} mono />
-              <KeyVal k="Protected reserve" v={<span className="text-cyan">{usd(reserve)}</span>} mono />
+              <KeyVal k="Cash & equivalents" v={<span className="text-cyan">{usd(reserve)}</span>} mono />
               <KeyVal k="Locked floor" v={<span className="text-up">{usd(floor)}</span>} mono />
               <KeyVal k="Levels completed" v={data.levels_completed} mono />
               <KeyVal k="Regressions" v={
