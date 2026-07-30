@@ -119,3 +119,38 @@ recipe):
   a fabricated correlation coefficient: cells mark a same-group flag pulled
   from the actual `correlation_group` field, with a tooltip and legend saying
   exactly that, so the instrument stays honest about what it's showing.
+
+
+## 8. v2.1.1 - framing fix and local dev environment
+
+- **FrameCorners height bug** - the v2.1 pass made `FrameCorners` stretch to
+  `h-full` by default so it could pass through the Ladder screen's internal
+  scroll region. That default was wrong: on Risk Exposure, the kill-switch
+  section's flex-column ancestor has a *definite* height (set by CSS Grid's
+  `align-items: stretch` against the taller sibling column), so `h-full`
+  resolved against that definite height instead of behaving as a no-op. The
+  wrapped section then consumed the whole column via `grid-rows-[minmax(0,1fr)]`,
+  and `flex-shrink` on the sibling panels (combined with `overflow-hidden`
+  removing their min-content floor) squeezed the Drawdown Circuit Breakers and
+  Exposure Utilization panels down to zero height.
+  Fix: `FrameCorners` now defaults to a plain wrapper (corner ticks only, no
+  sizing participation) and takes an explicit `fill` prop for the one call
+  site that needs height passthrough (`Ladder.tsx`). Verified via full-page
+  screenshots on all six screens after the change.
+- Extended the corner-frame treatment to the Risk kill switch, Treasury's
+  Approval Inbox, and the Opportunities kanban board, so the framing motif
+  reads consistently across every screen rather than just Dashboard and
+  Portfolio Analytics.
+- Removed the `playwright` devDependency (it was only ever needed for
+  sandbox-side screenshot testing during this redesign) so a fresh
+  `npm install` on this repo stays lean.
+
+### Running it locally
+
+Backend: `backend/.venv/Scripts/python.exe -m uvicorn app.main:app --host 127.0.0.1 --port 8000`
+Frontend: `npm run dev -- --port 5180` from `frontend/` (or just `npm run dev`
+for the default port 5173, if nothing else on the machine is using it).
+
+`app/main.py`'s CORS `allow_origins` list includes both `:5173` and `:5180`
+so the dev server works on either port - useful when another local project is
+already bound to Vite's default port.
