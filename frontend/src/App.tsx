@@ -1,6 +1,6 @@
 import { useState } from 'react'
 import {
-  Activity, BarChart3, Landmark, ShieldAlert, TrendingUp, Wifi, WifiOff,
+  Activity, BarChart3, Landmark, ShieldAlert, TrendingUp, Wifi, WifiOff, Layers,
 } from 'lucide-react'
 import { cx } from './components/ui'
 import { api } from './lib/api'
@@ -11,6 +11,7 @@ import LadderScreen from './screens/Ladder'
 import Opportunities from './screens/Opportunities'
 import RiskConsole from './screens/Risk'
 import TreasuryScreen from './screens/Treasury'
+import VisualHub from './screens/VisualHub'
 
 const TABS = [
   { id: 'ladder', label: 'Ladder', icon: TrendingUp },
@@ -18,6 +19,7 @@ const TABS = [
   { id: 'opportunities', label: 'Opportunities', icon: Activity },
   { id: 'risk', label: 'Risk', icon: ShieldAlert },
   { id: 'treasury', label: 'Treasury', icon: Landmark },
+  { id: 'visuals', label: 'Visuals', icon: Layers },
 ] as const
 
 type TabId = (typeof TABS)[number]['id']
@@ -105,6 +107,7 @@ export default function App() {
         {tab === 'opportunities' && <Opportunities />}
         {tab === 'risk' && <RiskConsole />}
         {tab === 'treasury' && <TreasuryScreen />}
+        {tab === 'visuals' && <VisualHub />}
       </main>
 
       <footer className="border-t border-hair px-4 py-2 text-2xs text-faint flex flex-wrap gap-x-4 gap-y-1">
