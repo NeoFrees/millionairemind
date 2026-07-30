@@ -3,9 +3,13 @@ import {
   Bar, BarChart, CartesianGrid, Cell, ResponsiveContainer, Tooltip as RTooltip,
   Treemap, XAxis, YAxis,
 } from 'recharts'
-import { Allocation, Badge, Delta, Empty, Gauge, KeyVal, Panel, Pnl, Segmented, Tip, cx } from '../components/ui'
+import {
+  Allocation, Badge, Delta, Empty, Eyebrow, FrameCorners, Gauge, KeyVal, Panel, Pnl,
+  Segmented, Tip, cx,
+} from '../components/ui'
 import { pct, price, titleize, usd } from '../lib/format'
 import { demoDashboard } from '../lib/demo'
+import type { Position } from '../lib/types'
 
 const PERIODS = ['1D', '1W', '1M', 'YTD'] as const
 // amber is reserved for 'not real money' warnings — it is not an allocation colour
@@ -68,11 +72,12 @@ export default function VisualHub() {
 
       {/* ══ SECTION: Allocation ═══════════════════════════════════════════ */}
       <section>
-        <h2 className="h2 mb-1">Risk Exposure by Asset Class</h2>
+        <Eyebrow index="01">Risk Exposure by Asset Class</Eyebrow>
         <p className="micro mb-3">Notional weights, cash included · as of last mark</p>
 
         <div className="grid12 items-start">
-          <Panel className="col-main min-w-0" title="Allocation Treemap"
+          <FrameCorners className="col-main min-w-0">
+          <Panel title="Allocation Treemap"
             subtitle="Area is proportional to notional weight"
             right={<Segmented options={PERIODS} value={period} onChange={setPeriod} />}
             pad={false}>
@@ -87,33 +92,19 @@ export default function VisualHub() {
               )}
             </div>
           </Panel>
+          </FrameCorners>
 
           <div className="col-rail flex flex-col gap-gutter min-w-0">
             <Panel title="Weights" subtitle="Sorted by notional">
               <Allocation items={byClass} />
-            </Panel>
-            <Panel title="Concentration" subtitle="Single-name and single-class limits">
-              <div className="grid grid-cols-2 gap-2">
-                <Gauge size={120}
-                  value={gross > 0 ? Math.max(...open.map((p) => p.size_usd)) / gross : 0}
-                  center={pct(gross > 0 ? Math.max(...open.map((p) => p.size_usd)) / gross : 0, 0)}
-                  label="Largest position" sub={<>of gross exposure</>} />
-                <Gauge size={120}
-                  value={s.equity > 0 ? gross / s.equity : 0}
-                  center={pct(s.equity > 0 ? gross / s.equity : 0, 0)}
-                  label="Gross / equity" sub={<>leverage proxy</>} />
-              </div>
-              <p className="micro mt-3 pt-3 border-t border-hair">
-                Concentration is measured on notional, not on risk-adjusted contribution —
-                two positions in the same correlation group read as diversified here and are
-                caught by the correlation limit instead.
-              </p>
             </Panel>
           </div>
         </div>
       </section>
 
       {/* ══ SECTION: Attribution + order book ════════════════════════════ */}
+      <section>
+      <Eyebrow index="02">Attribution & Order Flow</Eyebrow>
       <div className="grid12 items-start">
         <Panel className="col-main min-w-0" title="P&L Attribution"
           subtitle="Unrealised contribution by position · adjusted for modelled fees" pad={false}>
@@ -183,8 +174,49 @@ export default function VisualHub() {
           </div>
         </Panel>
       </div>
+      </section>
+
+      {/* ══ SECTION: correlation exposure ═══════════════════════════════ */}
+      <section>
+      <Eyebrow index="03">Correlation & Concentration</Eyebrow>
+      <div className="grid12 items-start">
+        <Panel className="col-main min-w-0" title="Correlation Exposure Matrix"
+          subtitle="Shared correlation-group flag between open positions — a same-group flag, not a fitted coefficient"
+          pad={false}>
+          <CorrelationMatrix positions={open} />
+          <div className="px-4 py-2.5 border-t border-hair">
+            <p className="micro">
+              This reads book structure, not statistics: cells mark whether two positions share a
+              correlation group (from the pre-trade risk check), not a fitted return correlation.
+              Two names can be numerically correlated without sharing a group, or vice versa.
+            </p>
+          </div>
+        </Panel>
+
+        <div className="col-rail flex flex-col gap-gutter min-w-0">
+          <Panel title="Concentration" subtitle="Single-name and single-class limits">
+            <div className="grid grid-cols-2 gap-2">
+              <Gauge size={120}
+                value={gross > 0 ? Math.max(...open.map((p) => p.size_usd)) / gross : 0}
+                center={pct(gross > 0 ? Math.max(...open.map((p) => p.size_usd)) / gross : 0, 0)}
+                label="Largest position" sub={<>of gross exposure</>} />
+              <Gauge size={120}
+                value={s.equity > 0 ? gross / s.equity : 0}
+                center={pct(s.equity > 0 ? gross / s.equity : 0, 0)}
+                label="Gross / equity" sub={<>leverage proxy</>} />
+            </div>
+            <p className="micro mt-3 pt-3 border-t border-hair">
+              Concentration is measured on notional, not risk-adjusted contribution — read it
+              next to the matrix on the left, not in isolation: two positions can look
+              diversified here and still share a correlation group.
+            </p>
+          </Panel>
+        </div>
+      </div>
+      </section>
 
       {/* ══ SECTION: position detail ═════════════════════════════════════ */}
+      <Eyebrow index="04">Position Detail & Liquidity</Eyebrow>
       <Panel title="Position Detail" subtitle="Marks, levels and exits per open position" pad={false}>
         <div className="overflow-auto">
           <table className="grid-table">
@@ -270,6 +302,67 @@ export default function VisualHub() {
 }
 
 /* ── treemap cell renderer ────────────────────────────────────────────────── */
+/* ── correlation exposure matrix: shared-group flag, not a fitted coefficient ── */
+function CorrelationMatrix({ positions }: { positions: Position[] }) {
+  if (positions.length < 2) {
+    return <Empty>Need at least two open positions to compare correlation groups.</Empty>
+  }
+  const short = (s: string) => (s.length > 13 ? `${s.slice(0, 12)}…` : s)
+  return (
+    <div className="overflow-auto p-3">
+      <table className="grid-table" style={{ tableLayout: 'fixed' }}>
+        <thead>
+          <tr>
+            <th className="w-[150px]">Position</th>
+            {positions.map((p) => (
+              <th key={p.id} className="text-center w-[64px]" title={p.instrument}>{short(p.instrument)}</th>
+            ))}
+          </tr>
+        </thead>
+        <tbody>
+          {positions.map((row) => (
+            <tr key={row.id}>
+              <td className="font-semibold text-ink whitespace-nowrap">
+                {short(row.instrument)}
+                <div className="micro">{row.correlation_group}</div>
+              </td>
+              {positions.map((col) => {
+                const self = row.id === col.id
+                const same = !self && row.correlation_group === col.correlation_group
+                return (
+                  <td key={col.id} className="text-center p-1.5">
+                    <Tip text={self ? 'Same position'
+                      : same ? <>Shared correlation group — <span className="text-ink">{row.correlation_group}</span></>
+                      : 'No shared correlation group'}>
+                      <div className={cx('mx-auto h-7 w-7 rounded-[4px] grid place-items-center num text-2xs font-bold',
+                        self ? 'bg-ink text-white'
+                          : same ? 'bg-down/[0.14] text-down border border-down/30'
+                          : 'bg-panel2 text-faint border border-hair')}>
+                        {self ? '—' : same ? '●' : '·'}
+                      </div>
+                    </Tip>
+                  </td>
+                )
+              })}
+            </tr>
+          ))}
+        </tbody>
+      </table>
+      <div className="flex items-center gap-4 px-1 pt-1">
+        <span className="inline-flex items-center gap-1.5 micro">
+          <span className="h-3 w-3 rounded-[3px] bg-down/[0.14] border border-down/30" /> shared group
+        </span>
+        <span className="inline-flex items-center gap-1.5 micro">
+          <span className="h-3 w-3 rounded-[3px] bg-panel2 border border-hair" /> independent
+        </span>
+        <span className="inline-flex items-center gap-1.5 micro">
+          <span className="h-3 w-3 rounded-[3px] bg-ink" /> self
+        </span>
+      </div>
+    </div>
+  )
+}
+
 function Cellish(props: Record<string, unknown>) {
   const x = props.x as number, y = props.y as number
   const w = props.width as number, h = props.height as number

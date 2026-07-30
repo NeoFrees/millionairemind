@@ -1,20 +1,23 @@
 import { useMemo, useState } from 'react'
 import {
-  Area, AreaChart, CartesianGrid, ReferenceLine, ResponsiveContainer, XAxis, YAxis,
-  Tooltip as RTooltip,
+  Area, AreaChart, Bar, CartesianGrid, Cell, ComposedChart, ReferenceLine,
+  ResponsiveContainer, XAxis, YAxis, Tooltip as RTooltip,
 } from 'recharts'
 import { ArrowUpDown, Radio } from 'lucide-react'
 import {
-  Allocation, Badge, Delta, Dir, Empty, Gauge, KeyVal, Meter, Panel, Pnl, Segmented,
-  Stat, Tip, VenueTag, cx,
+  Allocation, Badge, Delta, Dir, Empty, Eyebrow, FrameCorners, Gauge, KeyVal,
+  Meter, Panel, Pnl, Segmented, Stat, Tip, VenueTag, cx, toCandle,
 } from '../components/ui'
 import { api } from '../lib/api'
 import { ago, clock, pct, price, signedPct, titleize, usd } from '../lib/format'
+import type { Candle } from '../components/ui'
 import type { Dashboard as DashData, Position } from '../lib/types'
 import { usePolled } from '../lib/useLive'
 
 const PERIODS = ['1D', '1W', '1M', 'YTD'] as const
 type Period = (typeof PERIODS)[number]
+const CHART_MODES = ['Area', 'Candles'] as const
+type ChartMode = (typeof CHART_MODES)[number]
 
 /** Parametric VaR shorthand: 1.645σ on a 1.6% daily vol assumption. Stated in
  *  micro-copy rather than presented as a model output, because it is not one. */
@@ -28,6 +31,7 @@ type SortKey = 'instrument' | 'size_usd' | 'unrealized_pnl' | 'kill_proximity'
 export default function Dashboard() {
   const { data } = usePolled<DashData>(api.dashboard, 1800)
   const [period, setPeriod] = useState<Period>('1D')
+  const [chartMode, setChartMode] = useState<ChartMode>('Area')
   const [sort, setSort] = useState<{ key: SortKey; dir: 1 | -1 }>({ key: 'size_usd', dir: -1 })
 
   const open = useMemo(
@@ -97,9 +101,18 @@ export default function Dashboard() {
       floorLine: p.floor > 0 ? p.floor : null,
       chg: prev > 0 ? (p.equity - prev) / prev : 0,
       high: Math.max(p.equity, prev),
+      low: Math.min(p.equity, prev),
       open: prev,
     }
   })
+  const candles: Candle[] = curve.map((p) => toCandle(p.tick, p.open, p.equity, p.high, p.low))
+
+  // trailing series for KPI sparklines — the point is a real trend read at a
+  // glance, not decoration, so both are derived from the same equity_curve
+  // the main chart draws from.
+  const equitySpark = windowed.map((p) => p.equity)
+  const pnlSpark = windowed.length > 1
+    ? windowed.map((p) => p.equity - windowed[0].equity) : []
 
   const byClass = Object.entries(
     open.reduce<Record<string, number>>((acc, p) => {
@@ -124,14 +137,15 @@ export default function Dashboard() {
 
       {/* ══ SECTION: Portfolio Performance ═════════════════════════════════ */}
       <section>
-        <h2 className="h2 mb-1">Portfolio Performance</h2>
+        <Eyebrow index="01">Portfolio Performance</Eyebrow>
         <p className="micro mb-3">Marked to last print · adjusted for fees and slippage</p>
         <div className="grid gap-4 grid-cols-2 lg:grid-cols-3 xl:grid-cols-6">
           <Stat label="Total Equity" value={usd(s.equity)} delta={dayPct} tone="neutral"
+            spark={equitySpark}
             tip="Cash plus mark-to-market value of open positions, net of accrued fees."
             sub={<>deployable <span className="num text-body">{usd(s.deployable)}</span></>} />
           <Stat label="Daily P&L" value={(dayPnl >= 0 ? '+' : '') + usd(dayPnl)}
-            tone={dayPnl >= 0 ? 'up' : 'down'}
+            tone={dayPnl >= 0 ? 'up' : 'down'} spark={pnlSpark}
             tip="Realised plus unrealised P&L for the current session, gross of tax."
             sub={<>realised <span className="num text-body">{usd(s.realized_pnl)}</span> · unrealised <span className="num text-body">{usd(s.unrealized_pnl)}</span></>} />
           <Stat label="Gross Exposure" value={usd(grossExposure)} tone="neutral"
@@ -156,10 +170,14 @@ export default function Dashboard() {
         {/* ── LEFT: instrument + book ──────────────────────────────────── */}
         <div className="col-main flex flex-col gap-gutter min-w-0">
 
+          <Eyebrow index="02">Execution & Position Book</Eyebrow>
+
+          <FrameCorners>
           <Panel title="Equity Curve"
             subtitle="Equity against the locked capital floor — the gap is what is actually at risk"
             right={
               <>
+                <Segmented options={CHART_MODES} value={chartMode} onChange={setChartMode} />
                 <Segmented options={PERIODS} value={period} onChange={setPeriod} />
                 <Badge tone={s.running ? 'live' : 'closed'}>
                   {s.running ? 'live' : 'paused'}
@@ -169,7 +187,7 @@ export default function Dashboard() {
             <div className="h-[300px]">
               {curve.length < 2 ? (
                 <Empty>Collecting equity history — the curve needs a couple of ticks.</Empty>
-              ) : (
+              ) : chartMode === 'Area' ? (
                 <ResponsiveContainer width="100%" height="100%">
                   <AreaChart data={curve} baseValue={yDomain[0]}
                     margin={{ top: 8, right: 12, left: 0, bottom: 0 }}>
@@ -203,15 +221,49 @@ export default function Dashboard() {
                       name="locked floor" />
                   </AreaChart>
                 </ResponsiveContainer>
+              ) : (
+                <ResponsiveContainer width="100%" height="100%">
+                  <ComposedChart data={candles} margin={{ top: 8, right: 12, left: 0, bottom: 0 }}>
+                    <CartesianGrid stroke="#E2E8F0" vertical={false} />
+                    <XAxis dataKey="label" stroke="#94A3B8" fontSize={10} minTickGap={28}
+                      tickLine={false} axisLine={{ stroke: '#E2E8F0' }}
+                      tickFormatter={(v) => `t${v}`} />
+                    <YAxis stroke="#94A3B8" fontSize={10} width={64} tickLine={false}
+                      axisLine={false} domain={yDomain} allowDataOverflow
+                      tickFormatter={(v: number) => usd(v, { compact: true })} />
+                    <RTooltip content={<CandleTip />} />
+                    {targetInView && (
+                      <ReferenceLine y={s.next_target} stroke="#F59E0B" strokeDasharray="4 3"
+                        label={{ value: `next rung ${usd(s.next_target, { compact: true })}`,
+                          fill: '#B45309', fontSize: 9, position: 'insideTopRight' }} />
+                    )}
+                    <Bar dataKey="wick" barSize={1.5} isAnimationActive={false}>
+                      {candles.map((d, i) => <Cell key={i} fill={d.up ? '#10B981' : '#EF4444'} />)}
+                    </Bar>
+                    <Bar dataKey="body" barSize={7} radius={[1, 1, 1, 1]} isAnimationActive={false}>
+                      {candles.map((d, i) => <Cell key={i} fill={d.up ? '#10B981' : '#EF4444'} />)}
+                    </Bar>
+                  </ComposedChart>
+                </ResponsiveContainer>
               )}
             </div>
             <div className="mt-3 pt-3 border-t border-hair flex flex-wrap gap-x-6 gap-y-1">
-              <Legend swatch="#10B981" label="Equity" />
-              <Legend swatch="#2563EB" label="Locked floor (swept, non-deployable)" dashed />
+              {chartMode === 'Area' ? (
+                <>
+                  <Legend swatch="#10B981" label="Equity" />
+                  <Legend swatch="#2563EB" label="Locked floor (swept, non-deployable)" dashed />
+                </>
+              ) : (
+                <>
+                  <Legend swatch="#10B981" label="Tick close ≥ open" />
+                  <Legend swatch="#EF4444" label="Tick close < open" />
+                </>
+              )}
               <Legend swatch="#F59E0B" label="Next rung target" dashed />
               <span className="micro ml-auto">{period} window · {curve.length} marks</span>
             </div>
           </Panel>
+          </FrameCorners>
 
           <Panel title="Open Positions"
             subtitle="Kill-thesis proximity is the column that matters — a profitable position whose reason has evaporated is still a liability"
@@ -293,6 +345,9 @@ export default function Dashboard() {
         {/* ── RIGHT: risk dashboard ────────────────────────────────────── */}
         <div className="col-rail flex flex-col gap-gutter min-w-0">
 
+          <Eyebrow index="03">Risk & Controls</Eyebrow>
+
+          <FrameCorners>
           <Panel title="Risk Management Suite"
             subtitle="Headroom before the kill switch trips">
             <div className="grid grid-cols-2 gap-2">
@@ -323,6 +378,7 @@ export default function Dashboard() {
               assumption applied to gross notional. It is an illustration, not a model output.
             </p>
           </Panel>
+          </FrameCorners>
 
           <Panel title="Quick Actions" subtitle="Every route is gated — paper mode refuses at the adapter">
             <div className="grid grid-cols-2 gap-2">
@@ -420,6 +476,24 @@ function CurveTip({ active, payload }: {
       <TipRow k="High" v={usd(d.high)} />
       <TipRow k="Change" v={<Delta value={d.chg} digits={2} />} />
       <TipRow k="Locked floor" v={d.floorLine ? usd(d.floorLine) : '— none locked'} />
+    </div>
+  )
+}
+
+function CandleTip({ active, payload }: {
+  active?: boolean; payload?: { payload: Candle }[]
+}) {
+  if (!active || !payload?.length) return null
+  const d = payload[0].payload
+  const chg = d.open > 0 ? (d.close - d.open) / d.open : 0
+  return (
+    <div className="rounded-card border border-hair bg-panel shadow-lift px-3 py-2 min-w-[190px]">
+      <div className="label mb-1.5">Tick {d.label}</div>
+      <TipRow k="Open" v={usd(d.open)} />
+      <TipRow k="Close" v={usd(d.close)} strong />
+      <TipRow k="High" v={usd(d.high)} />
+      <TipRow k="Low" v={usd(d.low)} />
+      <TipRow k="Change" v={<Delta value={chg} digits={2} />} />
     </div>
   )
 }

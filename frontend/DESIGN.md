@@ -85,3 +85,37 @@ The redesign deliberately does **not** dress simulated output as a track record:
 - Beta reads `n/a` because no benchmark series is wired, rather than inventing one.
 - Projected Growth states a required return and explicitly declines to imply a timeline.
 - The cash sleeve split is marked illustrative, because paper mode holds one balance.
+
+## 7. v2.1 — instrument framing pass
+
+A second pass pushed the "instrument, not dashboard" read further, following
+patterns from how real trading terminals frame density (Bloomberg's own UX
+writeup on progressive density and flat panels; Recharts' documented
+range-value bar technique for candlesticks; shadcn's grid-pattern background
+recipe):
+
+- **Hairline engineering grid** — a 32px, 3%-opacity grid layered under the
+  existing corner gradients (`body` in `index.css`). Reads as an instrument
+  surface rather than a marketing page, and stays invisible enough that it
+  never competes with card content.
+- **Corner-bracket framing** (`.frame-corners` / `<FrameCorners>`) — four 1px
+  L-ticks outside a panel's edge, in `cyan` at 55% opacity. Reserved for the
+  one or two headline panels per screen (Equity Curve, Risk Management Suite,
+  Allocation Treemap) — used on every card it stops being a signal.
+- **Numbered section eyebrows** (`<Eyebrow index="01">`) — a small navy index
+  chip plus a letter-spaced label above each major section, in place of a
+  plain `<h2>`. Mirrors Bloomberg's dense labelling convention.
+- **Real candlesticks** — `Equity Curve` now has an Area/Candles toggle. The
+  candle view is built the way Recharts documents it: two `Bar`s whose
+  `dataKey` resolves to a `[low, high]` / `[min(open,close), max(open,close)]`
+  tuple (range-value bars), not a custom shape reaching into chart-internal
+  axis state. See `toCandle()` and `<Candle>` in `components/ui.tsx`.
+- **Inline sparklines** (`<Sparkline>`) — Total Equity and Daily P&L KPI
+  tiles carry a trailing trend line (Recharts `AreaChart`, no axes, ~88×28px),
+  the standard institutional-tile convention for "the number plus its recent
+  shape" in one glance.
+- **Correlation Exposure Matrix** — a heatmap grid on Portfolio Analytics
+  showing which open positions share a correlation group. Deliberately *not*
+  a fabricated correlation coefficient: cells mark a same-group flag pulled
+  from the actual `correlation_group` field, with a tooltip and legend saying
+  exactly that, so the instrument stays honest about what it's showing.

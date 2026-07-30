@@ -1,8 +1,84 @@
 import { type ReactNode } from 'react'
 import clsx from 'clsx'
+import { Area, AreaChart, ResponsiveContainer, YAxis } from 'recharts'
 import { pct, signedPct, signedUsd, usd } from '../lib/format'
 
 export const cx = clsx
+
+/* ────────────────────────────────────────────────────────────────────────────
+ * FrameCorners — four 1px L-bracket ticks outside a panel's edge. Reserved
+ * for the headline instrument on a screen (equity curve, risk suite) so it
+ * reads as "the one to watch," not decoration repeated on every card.
+ * ──────────────────────────────────────────────────────────────────────────── */
+export function FrameCorners({ children, className }: { children: ReactNode; className?: string }) {
+  return (
+    <div className={cx('frame-corners', className)}>
+      <span className="fc-tr" /><span className="fc-bl" />
+      {children}
+    </div>
+  )
+}
+
+/* ────────────────────────────────────────────────────────────────────────────
+ * Eyebrow — numbered micro-label above a section header, Bloomberg-style
+ * dense labelling: "01 · PORTFOLIO PERFORMANCE".
+ * ──────────────────────────────────────────────────────────────────────────── */
+export function Eyebrow({ index, children }: { index: string | number; children: ReactNode }) {
+  return (
+    <div className="eyebrow">
+      <span className="eyebrow-index">{index}</span>
+      {children}
+    </div>
+  )
+}
+
+/* ────────────────────────────────────────────────────────────────────────────
+ * Sparkline — inline trend line for a KPI tile. No axes, no gridlines, just
+ * the line and a terminal dot in the same tone as the headline delta.
+ * ──────────────────────────────────────────────────────────────────────────── */
+export function Sparkline({
+  data, tone = 'up', width = 88, height = 28,
+}: { data: number[]; tone?: 'up' | 'down' | 'neutral'; width?: number; height?: number }) {
+  if (data.length < 2) return null
+  const stroke = tone === 'up' ? '#10B981' : tone === 'down' ? '#EF4444' : '#64748B'
+  const points = data.map((v, i) => ({ i, v }))
+  const lo = Math.min(...data), hi = Math.max(...data)
+  const pad = (hi - lo) * 0.15 || Math.abs(hi) * 0.05 || 1
+  return (
+    <div style={{ width, height }} className="shrink-0">
+      <ResponsiveContainer width="100%" height="100%">
+        <AreaChart data={points} margin={{ top: 2, right: 1, left: 1, bottom: 0 }}>
+          <defs>
+            <linearGradient id={`spark-${tone}`} x1="0" y1="0" x2="0" y2="1">
+              <stop offset="0%" stopColor={stroke} stopOpacity={0.28} />
+              <stop offset="100%" stopColor={stroke} stopOpacity={0} />
+            </linearGradient>
+          </defs>
+          <YAxis hide domain={[lo - pad, hi + pad]} />
+          <Area type="monotone" dataKey="v" stroke={stroke} strokeWidth={1.5}
+            fill={`url(#spark-${tone})`} dot={false}
+            isAnimationActive={false} />
+        </AreaChart>
+      </ResponsiveContainer>
+    </div>
+  )
+}
+
+/* ────────────────────────────────────────────────────────────────────────────
+ * Candle — real OHLC candlesticks, built the way Recharts documents them:
+ * range-value bars. `wick` and `body` each resolve to a [min, max] tuple,
+ * which Recharts renders as a floating bar rather than one based at zero.
+ * No custom shape reading chart-internal axis state — just two Bars.
+ * ──────────────────────────────────────────────────────────────────────────── */
+export interface Candle {
+  label: string | number; open: number; close: number; high: number; low: number
+  up: boolean; wick: [number, number]; body: [number, number]
+}
+
+export const toCandle = (label: string | number, open: number, close: number, high: number, low: number): Candle => ({
+  label, open, close, high, low, up: close >= open,
+  wick: [low, high], body: [Math.min(open, close), Math.max(open, close)],
+})
 
 /* ────────────────────────────────────────────────────────────────────────────
  * Tooltip — every number on the desk should be able to explain itself.
@@ -74,10 +150,10 @@ export function Delta({
  * Stat — a tape/KPI tile. Monospaced value, optional delta, micro-copy footer.
  * ──────────────────────────────────────────────────────────────────────────── */
 export function Stat({
-  label, value, sub, tone = 'neutral', mono = true, delta, tip, footnote,
+  label, value, sub, tone = 'neutral', mono = true, delta, tip, footnote, spark,
 }: {
   label: string; value: string; sub?: ReactNode; delta?: number; tip?: ReactNode
-  footnote?: string
+  footnote?: string; spark?: number[]
   tone?: 'neutral' | 'up' | 'down' | 'amber' | 'cyan'; mono?: boolean
 }) {
   const tones = {
@@ -92,7 +168,12 @@ export function Stat({
   )
   return (
     <div className="panel panel-hover px-gutter py-3.5">
-      {tip ? <Tip text={tip}>{head}</Tip> : head}
+      <div className="flex items-start justify-between gap-2">
+        {tip ? <Tip text={tip}>{head}</Tip> : head}
+        {spark && spark.length > 1 && (
+          <Sparkline data={spark} tone={delta === undefined ? 'neutral' : delta >= 0 ? 'up' : 'down'} />
+        )}
+      </div>
       <div className="mt-2 flex items-baseline gap-2 flex-wrap">
         <span className={cx('text-xl font-semibold', mono && 'num', tones[tone])}>{value}</span>
         {delta !== undefined && <Delta value={delta} digits={1} />}
